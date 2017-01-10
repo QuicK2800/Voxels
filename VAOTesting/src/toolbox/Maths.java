@@ -51,4 +51,8 @@ public class Maths {
 		Matrix4f.scale(new Vector3f(scale.x, scale.y, 1f), matrix, matrix);
 		return matrix;
 	}
+	
+	public static float lerp(float value1, float value2, float t) {
+		return (1-t)*value1 + t*value2;
+	}
 }

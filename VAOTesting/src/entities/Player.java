@@ -4,6 +4,8 @@ import org.lwjgl.input.Keyboard;
 import org.lwjgl.util.vector.Vector2f;
 import org.lwjgl.util.vector.Vector3f;
 
+import renderEngine.DisplayManager;
+
 public class Player {
 	private Vector3f position = new Vector3f();
 	private Vector3f rotation = new Vector3f();
@@ -11,9 +13,9 @@ public class Player {
 	
 	private float yTarget = 0;
 	
-	private static final float MOVE_SPEED = 0.25f;
-	private static final float GRAVITY = -0.009f;
-	private static final float JUMP_POWER = 0.3f;
+	private static final float MOVE_SPEED = 8f;
+	public static final float GRAVITY = -1f;
+	private static final float JUMP_POWER = 0.5f;
 	
 	private boolean inAir = true;
 	
@@ -23,6 +25,7 @@ public class Player {
 	
 	public Player(Vector3f position) {
 		this.position = position;
+		rotation.y = 180;
 	}
 	
 	public void setCamera(Camera camera) {
@@ -39,19 +42,19 @@ public class Player {
 		float velocityModifierZ = 0f;
 		
 		if (Keyboard.isKeyDown(Keyboard.KEY_W)) {
-			velocityModifierZ += -direction.x * MOVE_SPEED;
-			velocityModifierX += direction.y * MOVE_SPEED;
+			velocityModifierZ += -direction.x * MOVE_SPEED * DisplayManager.getDelta();
+			velocityModifierX += direction.y * MOVE_SPEED * DisplayManager.getDelta();
 		} else if (Keyboard.isKeyDown(Keyboard.KEY_S)) {
-			velocityModifierZ += direction.x * MOVE_SPEED;
-			velocityModifierX += -direction.y * MOVE_SPEED;
+			velocityModifierZ += direction.x * MOVE_SPEED * DisplayManager.getDelta();
+			velocityModifierX += -direction.y * MOVE_SPEED * DisplayManager.getDelta();
 		}
 		
 		if (Keyboard.isKeyDown(Keyboard.KEY_D)) {
-			velocityModifierZ += direction.y * MOVE_SPEED;
-			velocityModifierX += direction.x * MOVE_SPEED;
+			velocityModifierZ += direction.y * MOVE_SPEED * DisplayManager.getDelta();
+			velocityModifierX += direction.x * MOVE_SPEED * DisplayManager.getDelta();
 		} else if (Keyboard.isKeyDown(Keyboard.KEY_A)) {
-			velocityModifierZ += -direction.y * MOVE_SPEED;
-			velocityModifierX += -direction.x * MOVE_SPEED;
+			velocityModifierZ += -direction.y * MOVE_SPEED * DisplayManager.getDelta();
+			velocityModifierX += -direction.x * MOVE_SPEED * DisplayManager.getDelta();
 		}
 		
 		velocity.x = velocityModifierX;
@@ -107,7 +110,10 @@ public class Player {
 			rotation.y -= rotateSpeed;
 		}
 		
-		velocity.y += GRAVITY;
+		velocity.y += GRAVITY * DisplayManager.getDelta();
+		if (velocity.y < -5) {
+			velocity.y = -5;
+		}
 		
 		Vector3f.add(position, velocity, position);
 		
@@ -124,6 +130,8 @@ public class Player {
 				yTarget = position.y;
 			}
 		}
+		
+		//if (position.y < 16) position.y = 16;
 	}
 	
 	public Vector3f getPosition() {

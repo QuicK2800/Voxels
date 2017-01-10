@@ -21,6 +21,7 @@ public class Camera {
 	
 	public Camera(Player player) {
 		this.player = player;
+		angleAroundPlayer = 180;
 	}
 
 	public void move() {

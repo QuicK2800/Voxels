@@ -14,6 +14,7 @@ import textures.ModelTexture;
 import toolbox.ByteUtils;
 import toolbox.Debug;
 import toolbox.HeightsGenerator;
+import toolbox.Maths;
 
 public class Chunk {
 	
@@ -30,6 +31,8 @@ public class Chunk {
 	private Block[][][] blocks = new Block[WIDTH][HEIGHT][DEPTH];
 	private int[][] heightMap = new int[WIDTH][DEPTH];
 	private Map<String, Block> blocksWithVisibleSides = new HashMap<>();
+	
+	private float green = (float)Math.random() + 0.3f;
 	
 	public Chunk(int x, int z) {
 		this.x = x;
@@ -74,6 +77,39 @@ public class Chunk {
 				blocksWithVisibleSides.put(i+" "+j+" "+k, blocks[i][j][k]);
 			}
 			blocks[i][j][k].setCullData(cullData);
+		}
+	}
+	
+	public void updateCullData() {
+		ChunkManager manager = ChunkManager.getInstance();
+		for (int i = 0; i < WIDTH; i++)
+		for (int j = 0; j < HEIGHT; j++)
+		for (int k = 0; k < DEPTH; k++)
+		{
+			int posX = i + x * WIDTH;
+			int posZ = k + z * DEPTH;
+			if (manager.getBlockAt(posX, j, posZ).getBlockID() == -1) continue;
+			byte cullData = (byte)0;
+			
+			if (j < HEIGHT-1 && manager.getBlockAt(posX, j+1, posZ).getBlockID() == -1) {
+				cullData |= ByteUtils.TOP;
+			}
+			if (j > 0 && manager.getBlockAt(posX, j-1, posZ).getBlockID() == -1) {
+				cullData |= ByteUtils.BOTTOM;
+			}
+			if (manager.getBlockAt(posX+1, j, posZ).getBlockID() == -1) {
+				cullData |= ByteUtils.RIGHT;
+			}
+			if (manager.getBlockAt(posX-1, j, posZ).getBlockID() == -1) {
+				cullData |= ByteUtils.LEFT;
+			}
+			if (manager.getBlockAt(posX, j, posZ+1).getBlockID() == -1) {
+				cullData |= ByteUtils.FRONT;
+			}
+			if (manager.getBlockAt(posX, j, posZ-1).getBlockID() == -1) {
+				cullData |= ByteUtils.BACK;
+			}
+			manager.getBlockAt(posX, j, posZ).setCullData(cullData);
 		}
 	}
 	
@@ -150,10 +186,18 @@ public class Chunk {
 	
 	public RawModel loadChunk() {
 		
+		float[] shadows = new float[6];
+		shadows[0] = 0.1f;
+		shadows[1] = 0.45f;
+		shadows[2] = 0.3f;
+		shadows[3] = 0.2f;
+		shadows[4] = 0.5f;
+		shadows[5] = 0.05f;
+		
 		/***********************************************************\
 		 *                    Generate Vertices                    *
 		\***********************************************************/
-		
+		/**  GL_TRIANGLES **/
 		float[][] baseVertices = BlockModel.vertices;
 		float[] vertices = new float[WIDTH * HEIGHT * DEPTH * 72];
 		int iterator = 0;
@@ -252,12 +296,37 @@ public class Chunk {
 		 *                    Generate Colors                      *
 		\***********************************************************/
 		
-		float[] colors = new float[WIDTH * HEIGHT * DEPTH * 72];
+		float[] colors = new float[WIDTH * HEIGHT * DEPTH * 108];
 		iterator = 0;
 		for (int x = 0; x < WIDTH; x++)
 		for (int y = 0; y < HEIGHT; y++)
 		for (int z = 0; z < DEPTH; z++) {
-			colors[iterator++] = 0.2f;
+			
+			int blockID = blocks[x][y][z].getBlockID();
+			byte cullData = blocks[x][y][z].getCullData();
+			boolean[] renderFace = new boolean[6];
+			for (int b = 0; b < renderFace.length; b++) {
+				if (ByteUtils.isBitOn(cullData, b)) {
+					renderFace[b] = true;
+				} else {
+					renderFace[b] = false;
+				}
+			}
+			
+			int height = heightMap[x][z];
+			
+			if (blockID == -1) continue;
+			
+			for (int i = 0; i < 6; i++) {
+				if (renderFace[i]) {
+					for (int j = 0; j < 4; j++) {
+						colors[iterator++] = 0 - shadows[i];
+						colors[iterator++] = green - shadows[i];
+						colors[iterator++] = 0 - shadows[i];
+						Debug.vertexColorCount += 3;
+					}
+				}
+			}
 		}
 		
 		/***********************************************************\
@@ -288,20 +357,18 @@ public class Chunk {
 			for (int i = 0; i < baseIndices.length; i++) 
 			{
 				if (renderFace[i]) {
-					for (int j = 0; j < baseIndices[i].length; j++) {
-						indices[iterator++] = currentNumber;
-						indices[iterator++] = currentNumber+1;
-						indices[iterator++] = currentNumber+2;
-						indices[iterator++] = currentNumber+2;
-						indices[iterator++] = currentNumber+3;
-						indices[iterator++] = currentNumber;
-						Debug.indexCount++;
-					}
+					indices[iterator++] = currentNumber;
+					indices[iterator++] = currentNumber+1;
+					indices[iterator++] = currentNumber+2;
+					indices[iterator++] = currentNumber+2;
+					indices[iterator++] = currentNumber+3;
+					indices[iterator++] = currentNumber;
 					currentNumber += 4;
+					Debug.indexCount += 6;
 				}
 			}
 		}
-		
+
 		return Loader.getInstance().loadToVAOWithColors(vertices, colors, indices);
 	}
 	
@@ -309,30 +376,41 @@ public class Chunk {
 		byte cullData = 0;
 		
 		if (getBlockAt(x, y, z).getBlockID() == -1) {
-			cullData = blocks[x+1][y][z].getCullData();
-			blocks[x+1][y][z].setCullData((byte)(cullData | ByteUtils.LEFT));
+			if (x+1 < Chunk.WIDTH) {
+				cullData = blocks[x+1][y][z].getCullData();
+				blocks[x+1][y][z].setCullData((byte)(cullData | ByteUtils.LEFT));
+			}
 			
-			cullData = blocks[x-1][y][z].getCullData();
-			blocks[x-1][y][z].setCullData((byte)(cullData | ByteUtils.RIGHT));
+			if (x-1 >= 0) {
+				cullData = blocks[x-1][y][z].getCullData();
+				blocks[x-1][y][z].setCullData((byte)(cullData | ByteUtils.RIGHT));
+			}
 			
-			cullData = blocks[x][y+1][z].getCullData();
-			blocks[x][y+1][z].setCullData((byte)(cullData | ByteUtils.BOTTOM));
+			if (y+1 < Chunk.HEIGHT) {
+				cullData = blocks[x][y+1][z].getCullData();
+				blocks[x][y+1][z].setCullData((byte)(cullData | ByteUtils.BOTTOM));
+			}
 			
-			cullData = blocks[x][y-1][z].getCullData();
-			blocks[x][y-1][z].setCullData((byte)(cullData | ByteUtils.TOP));
+			if (y-1 >= 0) {
+				cullData = blocks[x][y-1][z].getCullData();
+				blocks[x][y-1][z].setCullData((byte)(cullData | ByteUtils.TOP));
+			}
 			
-			cullData = blocks[x][y][z+1].getCullData();
-			blocks[x][y][z+1].setCullData((byte)(cullData | ByteUtils.BACK));
+			if (z+1 < Chunk.DEPTH) {
+				cullData = blocks[x][y][z+1].getCullData();
+				blocks[x][y][z+1].setCullData((byte)(cullData | ByteUtils.BACK));
+			}
 			
-			cullData = blocks[x][y][z-1].getCullData();
-			blocks[x][y][z-1].setCullData((byte)(cullData | ByteUtils.FRONT));
+			if (z-1 >= 0) {
+				cullData = blocks[x][y][z-1].getCullData();
+				blocks[x][y][z-1].setCullData((byte)(cullData | ByteUtils.FRONT));
+			}
 		}
 	}
 	
 	public void reload() {
 		rawModel = loadChunk();
 		texturedModel = new TexturedModel(rawModel, texture);
-		cullFaces();
 	}
 	
 	public Block getBlockAt(int x, int y, int z) {

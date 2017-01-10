@@ -1,6 +1,5 @@
 package engineTester;
 
-import models.BlockModel;
 import models.RawModel;
 import models.TexturedModel;
 
@@ -8,12 +7,15 @@ import org.lwjgl.input.Keyboard;
 import org.lwjgl.opengl.Display;
 import org.lwjgl.util.vector.Vector3f;
 
+import particles.ParticleMaster;
+import particles.ParticleSystem;
+import particles.ParticleTexture;
 import renderEngine.DisplayManager;
 import renderEngine.Loader;
 import renderEngine.OBJLoader;
 import renderEngine.Renderer;
-import shaders.StaticColorShader;
 import shaders.StaticShader;
+import shaders.TerrainShader;
 import textures.ModelTexture;
 import toolbox.Debug;
 import entities.Camera;
@@ -29,9 +31,12 @@ public class MainGameLoop {
 		
 		Loader loader = Loader.getInstance();
 		StaticShader shader = new StaticShader();
-		StaticColorShader colorShader = new StaticColorShader();
+		TerrainShader terrainShader = new TerrainShader();
 		Renderer renderer = new Renderer(shader);
+		Renderer colorRenderer = new Renderer(terrainShader);
 		ChunkManager chunkManager = ChunkManager.getInstance();
+		
+		ParticleMaster.init(loader, renderer.getProjectionMatrix());
 		
 		GuiManager guiManager = new GuiManager();
 		guiManager.addGuiElement(3, GuiManager.BOTTOM, GuiManager.WIDTH-6, 1, "white");
@@ -40,29 +45,9 @@ public class MainGameLoop {
 		Camera camera = new Camera(player);
 		player.setCamera(camera);
 		
-		
-		float[][] rawVertices = BlockModel.vertices;
-		float[] vertices = new float[rawVertices.length * rawVertices[0].length];
-		int iterator = 0;
-		for (int i = 0; i < rawVertices.length; i++) {
-			for (int j = 0; j < rawVertices[i].length; j++) {
-				vertices[iterator++] = rawVertices[i][j];
-			}
-		}
-		
-		int[][] rawIndices = BlockModel.indices;
-		int[] indices = new int[rawIndices.length * rawIndices[0].length];
-		iterator = 0;
-		for (int i = 0; i < rawIndices.length; i++) {
-			for (int j = 0; j < rawIndices[i].length; j++) {
-				indices[iterator++] = rawIndices[i][j];
-			}
-		}
-		
-		
-		for (int i = 0; i < 4; i++) {
-			for (int j = 0; j < 4; j++) {
-				chunkManager.addChunk(i, j);
+		for (int i = 0; i < 5; i++) {
+			for (int j = 0; j < 5; j++) {
+				chunkManager.addChunk(i-2, j-3);
 			}
 		}
 		
@@ -75,27 +60,56 @@ public class MainGameLoop {
 		
 		Debug.printBufferData();
 		
+		ParticleTexture particleTexture = new ParticleTexture(loader.loadTexture("particleAtlas"), 4);
+		
+		ParticleSystem system = new ParticleSystem(particleTexture, 300, 3, 1, 4);
+		
 //		boolean toggle = false;
 		while (!Display.isCloseRequested() && !Keyboard.isKeyDown(Keyboard.KEY_ESCAPE)) {
-			while (Keyboard.next() && Keyboard.getEventKey() == Keyboard.KEY_I && Keyboard.getEventKeyState()) {
-				float camX = player.getPosition().x;
-				float camY = player.getPosition().y;
-				float camZ = player.getPosition().z;
-				
-				chunkManager.removeBlock(camX, camY-2, camZ);
-				Chunk chunk = chunkManager.getChunkAt(camX, camZ);
-				chunkManager.reloadChunk(chunk.getX(), chunk.getZ());
+			while (Keyboard.next()) {
+				if (Keyboard.getEventKeyState()) {
+					if (Keyboard.getEventKey() == Keyboard.KEY_LSHIFT) {
+						float camX = player.getPosition().x;
+						float camY = player.getPosition().y;
+						float camZ = player.getPosition().z;
+						Vector3f blockPos = chunkManager.getWorldBlockPosition(camX, camY-2, camZ);
+						
+						//for (int i = 0; i < 4; i++) {
+							//for (int k = 0; k < 4; k++) {
+								chunkManager.removeBlock(camX, camY-2, camZ);
+							//}
+						//}
+								chunkManager.reloadBlock((int)blockPos.x, (int)blockPos.y, (int)blockPos.z);
+						
+						Chunk chunk = chunkManager.getChunkAt(camX, camZ);
+						chunkManager.reloadChunk(chunk.getX(), chunk.getZ());
+					}
+					if (Keyboard.getEventKey() == Keyboard.KEY_O) {
+						float camX = player.getPosition().x;
+						float camZ = player.getPosition().z;
+						
+						Chunk chunk = chunkManager.getChunkAt(camX, camZ);
+						chunkManager.reloadChunk(chunk.getX(), chunk.getZ());
+					}
+				}
 			}
+			
+			if (Keyboard.isKeyDown(Keyboard.KEY_Y)) {
+				system.generateParticles(player.getPosition());
+			}
+			
+			Chunk playerChunk = chunkManager.getChunkAt(player.getPosition().x, player.getPosition().z);
+//			System.out.println(playerChunk.getX() + ", " + playerChunk.getZ());
+			Vector3f pos = chunkManager.getWorldBlockPosition(player.getPosition().x, player.getPosition().y, player.getPosition().z);
+			System.out.println(pos.x + ", " + pos.z);
+			
 			player.move();
 			playerEntity.setPosition(player.getPosition());
 			playerEntity.setRotY(player.getRotation().y);
 			camera.move();
-			//Chunk chunk = chunkManager.getChunkAt(camera.getPosition().x, camera.getPosition().z);
-			//if (chunk != null)
-				//System.out.println(chunk.getX() + ", " + chunk.getZ());
-			//Block currentBlock = chunkManager.getBlockAt(camera.getPosition().x, camera.getPosition().y-2, camera.getPosition().z); 
-			//if (currentBlock != null)
-				//System.out.println(currentBlock.getBlockID());
+			
+			ParticleMaster.update(camera);
+			
 			renderer.prepare();
 			
 			shader.start();
@@ -103,15 +117,18 @@ public class MainGameLoop {
 				renderer.render(playerEntity, shader);
 			shader.stop();
 			
-			colorShader.start();
-			colorShader.loadViewMatrix(camera);
-				renderer.render(chunkManager.getChunkEntityMap(), colorShader);
-			colorShader.stop();
+			terrainShader.start();
+			terrainShader.loadViewMatrix(camera);
+				colorRenderer.render(chunkManager.getChunkEntityMap(), terrainShader);
+			terrainShader.stop();
+			
+			ParticleMaster.renderParticles(camera);
 			
 			guiManager.render();
 			DisplayManager.updateDisplay();
 		}
 		
+		ParticleMaster.cleanUp();
 		guiManager.cleanUp();
 		shader.cleanUp();
 		loader.cleanUp();

@@ -46,74 +46,19 @@ public class ChunkManager {
 	}
 	
 	public void fixEdgeRendering() {
-		int width = Chunk.getWidth();
-		int depth = Chunk.getDepth();
 		
-		for (String key : chunks.keySet()) {
-			Chunk chunk = chunks.get(key);
-			int x = chunk.getX();
-			int z = chunk.getZ();
-			Map<String, Block> visibleBlocks = chunk.getVisibleBlocks();
-			
-			for (String blockKey : visibleBlocks.keySet()) {
-				Block block = visibleBlocks.get(blockKey);
-				String[] positionData = blockKey.split(" ");
-				int blockX = Integer.parseInt(positionData[0]);
-				int blockY = Integer.parseInt(positionData[1]);
-				int blockZ = Integer.parseInt(positionData[2]);
-				
-				// If it is not on the border, skip.
-				if (blockX < width-1 && blockX > 0 && blockZ < depth-1 && blockZ > 0) continue;
-				
-				Chunk adjacentChunk;
-				byte cullData = block.getCullData();
-				
-				if (blockX == width-1) {
-					if (isValidChunk(x+1, z)) {
-						adjacentChunk = getChunkAt(x+1, z);
-						if ((cullData & ByteUtils.RIGHT) != ByteUtils.RIGHT && adjacentChunk.getBlockAt((blockX+1)%width, blockY, blockZ).getBlockID() != -1) {
-							block.setCullData((byte)(cullData | ByteUtils.RIGHT));
-						}
-					}
-				}
-				if (blockX == 0) {
-					if (isValidChunk(x-1, z)) {
-						adjacentChunk = getChunkAt(x-1, z);
-						if ((cullData & ByteUtils.LEFT) != ByteUtils.LEFT && adjacentChunk.getBlockAt(blockX+width-1, blockY, blockZ).getBlockID() != -1) {
-							block.setCullData((byte)(cullData | ByteUtils.LEFT));
-						}
-					}
-				}
-				
-				if (blockZ == depth-1) {
-					if (isValidChunk(x, z+1)) {
-						adjacentChunk = getChunkAt(x, z+1);
-						if ((cullData & ByteUtils.FRONT) != ByteUtils.FRONT && adjacentChunk.getBlockAt(blockX, blockY, (blockZ+1)%width).getBlockID() != -1) {
-							block.setCullData((byte)(cullData | ByteUtils.FRONT));
-						}
-					}
-				}
-				if (blockZ == 0) {
-					if (isValidChunk(x, z-1)) {
-						adjacentChunk = getChunkAt(x, z-1);
-						if ((cullData & ByteUtils.BACK) != ByteUtils.BACK && adjacentChunk.getBlockAt(blockX, blockY, blockZ+width-1).getBlockID() != -1) {
-							block.setCullData((byte)(cullData | ByteUtils.BACK));
-						}
-					}
-				}
-			}
-		}
 	}
 	
-	private Chunk getChunkAt(int x, int z) {
-		return chunks.get(x + " " + z);
-	}
-	
-	private Vector3f getWorldBlockPosition(float x, float y, float z) {
+	public Vector3f getWorldBlockPosition(float x, float y, float z) {
 		Chunk chunkWhichContainsBlock = getChunkAt(x, z);
 		if (chunkWhichContainsBlock == null) return null;
-		x %= Chunk.getWidth();
-		z %= Chunk.getDepth();
+		if (x < 0) {
+			x = (int)x - 1;
+		}
+		
+		if (z < 0) {
+			z = (int)z - 1;
+		}
 		return new Vector3f((int)x, (int)y, (int)z);
 	}
 	
@@ -125,7 +70,7 @@ public class ChunkManager {
 			chunkX = (int)x / Chunk.getWidth();
 		}
 		if (x < 0) {
-			chunkX = (int)x / Chunk.getWidth() - Chunk.getWidth();
+			chunkX = (int) Math.floor((int)x / Chunk.getDepth()) - 1;
 		}
 		
 		if (z >= 0) {
@@ -133,7 +78,7 @@ public class ChunkManager {
 		}
 		
 		if (z < 0) {
-			chunkZ = (int)z / Chunk.getDepth() - Chunk.getDepth();
+			chunkZ = (int) Math.floor((int)z / Chunk.getDepth()) - 1;
 		}
 		
 		if (!isValidChunk(chunkX, chunkZ)) {
@@ -145,19 +90,84 @@ public class ChunkManager {
 	public Block getBlockAt(float x, float y, float z) {
 		Chunk chunkWhichContainsBlock = getChunkAt(x, z);
 		if (chunkWhichContainsBlock == null) return null;
+		
+		if (x < 0) x = (int)x-1;
+		if (x > 0) x = (int)x;
+		if (z < 0) z = (int)z-1;
+		if (z > 0) z = (int)z;
+		
 		x %= Chunk.getWidth();
 		z %= Chunk.getDepth();
+		
+		if (x < 0) {
+			x += Chunk.getWidth();
+		}
+		
+		if (z < 0) z += Chunk.getDepth();
 		
 		return chunkWhichContainsBlock.getBlockAt((int)x, (int)y, (int)z);
 	}
 	
 	public void removeBlock(float x, float y, float z) {
-		Chunk chunk = getChunkAt(x, z);
 		Block block = getBlockAt(x, y, z);
 		block.setCullData((byte)0);
 		block.setBlockID(-1);
-		//reloadChunk(chunk.getX(), chunk.getZ());
 		Vector3f blockPosition = getWorldBlockPosition(x, y, z);
-		chunk.reloadBlock((int)blockPosition.x, (int)blockPosition.y, (int)blockPosition.z);
+		
+		reloadBlock((int)blockPosition.x, (int)blockPosition.y, (int)blockPosition.z);
+	}
+	
+	private boolean inSameChunk(int x1, int z1, int x2, int z2) {
+		return getChunkAt(x1, z1) == getChunkAt(x2, z2);
+	}
+	
+	public void reloadBlock(int x, int y, int z) {
+//		Block thisBlock, leftBlock, rightBlock, frontBlock, backBlock;
+//		
+//		thisBlock = getBlockAt(x, y, z);
+//		leftBlock = getBlockAt(x-1, y, z);
+//		rightBlock = getBlockAt(x+1, y, z);
+//		frontBlock = getBlockAt(x, y, z+1);
+//		backBlock = getBlockAt(x, y, z-1);
+		
+//		if (thisBlock.getBlockID() == BlockList.AIR) {
+//			leftBlock.setCullData((byte)(leftBlock.getCullData() | ByteUtils.RIGHT));
+//			rightBlock.setCullData((byte)(rightBlock.getCullData() | ByteUtils.LEFT));
+//			frontBlock.setCullData((byte)(frontBlock.getCullData() | ByteUtils.BACK));
+//			backBlock.setCullData((byte)(backBlock.getCullData() | ByteUtils.FRONT));
+//		}
+		
+		updateCullData(x, y, z);
+		updateCullData(x-1, y, z);
+		updateCullData(x+1, y, z);
+		updateCullData(x, y, z-1);
+		updateCullData(x, y, z+1);
+	}
+	
+	private void updateCullData(int x, int y, int z) {
+		int left, right, front, back;
+		left = getBlockAt(x-1, y, z).getBlockID();
+		right = getBlockAt(x+1, y, z).getBlockID();
+		front = getBlockAt(x, y, z+1).getBlockID();
+		back = getBlockAt(x, y, z-1).getBlockID();
+		
+		Block thisBlock = getBlockAt(x, y, z);
+		byte cullData = thisBlock.getCullData();
+		if (thisBlock.getBlockID() == BlockList.AIR) return;
+		if (left == BlockList.AIR) {
+			thisBlock.setCullData((byte) (cullData | ByteUtils.LEFT));
+		}
+		
+		if (right == BlockList.AIR) {
+			thisBlock.setCullData((byte) (cullData | ByteUtils.RIGHT));
+		}
+		
+		if (front == BlockList.AIR) {
+			thisBlock.setCullData((byte) (cullData | ByteUtils.FRONT));
+		}
+		
+		if (back == BlockList.AIR) {
+			thisBlock.setCullData((byte) (cullData | ByteUtils.BACK));
+		}
 	}
 }

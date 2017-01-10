@@ -13,8 +13,9 @@ import org.lwjgl.opengl.GL30;
 import org.lwjgl.util.vector.Matrix4f;
 import org.lwjgl.util.vector.Vector3f;
 
-import shaders.StaticColorShader;
+import shaders.TerrainShader;
 import shaders.StaticShader;
+import toolbox.Debug;
 import toolbox.Maths;
 import entities.Entity;
 
@@ -33,7 +34,7 @@ public class Renderer {
 		shader.stop();
 	}
 	
-	public Renderer(StaticColorShader shader) {
+	public Renderer(TerrainShader shader) {
 		shader.start();
 		createProjectionMatrix();
 		shader.loadProjectionMatrix(projectionMatrix);
@@ -43,7 +44,7 @@ public class Renderer {
 	public void prepare() {
 		GL11.glEnable(GL11.GL_DEPTH_TEST);
 		GL11.glClear(GL11.GL_COLOR_BUFFER_BIT | GL11.GL_DEPTH_BUFFER_BIT);
-		GL11.glClearColor(0, 0, 0, 1);
+		GL11.glClearColor(0, 0.5f, 0.8f, 1);
 	}
 	
 	public void render(Map<String, Entity> entities, StaticShader shader) {
@@ -66,7 +67,7 @@ public class Renderer {
 		}
 	}
 	
-	public void render(Map<String, Entity> entities, StaticColorShader shader) {
+	public void render(Map<String, Entity> entities, TerrainShader shader) {
 		for (String key : entities.keySet()) {
 			Entity entity = entities.get(key);
 			TexturedModel texturedModel = entity.getModel();
@@ -114,5 +115,9 @@ public class Renderer {
 		projectionMatrix.m23 = -1;
 		projectionMatrix.m32 = -((2 * NEAR_PLANE * FAR_PLANE) / frustum_length);
 		projectionMatrix.m33 = 0;
+	}
+	
+	public Matrix4f getProjectionMatrix() {
+		return projectionMatrix;
 	}
 }
